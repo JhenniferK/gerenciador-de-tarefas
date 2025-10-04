@@ -1,85 +1,156 @@
 package br.edu.ifpb.es.gerenciador.service;
 
+import br.edu.ifpb.es.gerenciador.exception.AutorizacaoNegadaException;
+import br.edu.ifpb.es.gerenciador.exception.NaoEncontradoException;
 import br.edu.ifpb.es.gerenciador.model.Tarefa;
 import br.edu.ifpb.es.gerenciador.model.Usuario;
 import br.edu.ifpb.es.gerenciador.repository.TarefaRepository;
-import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.server.ResponseStatusException;
+import br.edu.ifpb.es.gerenciador.repository.UsuarioRepository;
+import br.edu.ifpb.es.gerenciador.rest.dto.TarefaRequestDTO;
+import br.edu.ifpb.es.gerenciador.rest.dto.TarefaResponseDTO;
+import br.edu.ifpb.es.gerenciador.rest.dto.TarefaUpdateRequestDTO;
+import jakarta.transaction.Transactional;
+import org.springframework.stereotype.Service;
 
-import java.nio.file.AccessDeniedException;
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
+@Service
 public class TarefaService {
 
     private final TarefaRepository tarefaRepository;
+    private final UsuarioRepository usuarioRepository;
 
-    public TarefaService(TarefaRepository tarefaRepository) {
+    public TarefaService(TarefaRepository tarefaRepository, UsuarioRepository usuarioRepository) {
         this.tarefaRepository = tarefaRepository;
+        this.usuarioRepository = usuarioRepository;
     }
 
-    private Usuario getUsuarioLogado() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated() || (authentication.getPrincipal() != null && authentication.getPrincipal() instanceof Usuario)) {
-            throw new IllegalStateException("Nenhum usuário autenticado.");
+    @Transactional
+    public TarefaResponseDTO criarTarefa(TarefaRequestDTO dto, UUID usuarioId) {
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new RuntimeException("Usuário não encontrado."));
+
+        Tarefa tarefa = Tarefa.builder()
+                .tituloTarefa(dto.titulo())
+                .descricao(dto.descricao())
+                .criadoPor(usuario)
+                .build();
+        tarefaRepository.save(tarefa);
+        return new TarefaResponseDTO(
+                tarefa.getLookupId(),
+                tarefa.getTituloTarefa(),
+                tarefa.getDescricao(),
+                tarefa.getCriadoEm(),
+                tarefa.getAtualizadoEm(),
+                tarefa.getConcluidoEm(),
+                tarefa.getCriadoPor().getEmail()
+        );
+    }
+
+    public List<TarefaResponseDTO> listarTodasTarefasPorUsuario(UUID usuarioId) {
+        return tarefaRepository.findByCriadoPor_lookupId(usuarioId).stream()
+                .map(t -> new TarefaResponseDTO(
+                        t.getLookupId(),
+                        t.getTituloTarefa(),
+                        t.getDescricao(),
+                        t.getCriadoEm(),
+                        t.getAtualizadoEm(),
+                        t.getConcluidoEm(),
+                        t.getCriadoPor().getEmail()
+                ))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public TarefaResponseDTO marcarTarefaComoConcluida(UUID tarefaId, UUID usuarioId) {
+        Tarefa tarefa = tarefaRepository.findById(tarefaId)
+                .orElseThrow(() -> new NaoEncontradoException("Tarefa não encontrada."));
+
+        if (!tarefa.getCriadoPor().getLookupId().equals(usuarioId)) {
+            throw new AutorizacaoNegadaException("Você não tem permisão para acessar essa tarefa.");
         }
-        return (Usuario) authentication.getPrincipal();
+
+        if (!tarefa.feito()) {
+            tarefa.setConcluidoEm(LocalDateTime.now());
+            tarefaRepository.save(tarefa);
+        }
+        return new TarefaResponseDTO(
+                tarefa.getLookupId(),
+                tarefa.getTituloTarefa(),
+                tarefa.getDescricao(),
+                tarefa.getCriadoEm(),
+                tarefa.getAtualizadoEm(),
+                tarefa.getConcluidoEm(),
+                tarefa.getCriadoPor().getEmail()
+        );
     }
 
-    public Tarefa criarNovaTarefa(Tarefa tarefa) {
-        Usuario usuarioLogado = getUsuarioLogado();
-        tarefa.setCriadoPor(usuarioLogado);
-        return tarefaRepository.save(tarefa);
-    }
+    @Transactional
+    public TarefaResponseDTO atualizarTarefa(UUID tarefaId, TarefaUpdateRequestDTO dto, Usuario usuarioLogado) {
+        Tarefa tarefa = tarefaRepository.findById(tarefaId)
+                .orElseThrow(() -> new NaoEncontradoException("Tarefa não encontrada."));
 
-    public List<Tarefa> listarTodasTarefasDoUsuario() {
-        Usuario usuarioLogado = getUsuarioLogado();
-        return tarefaRepository.findByCriadoPor(usuarioLogado);
-    }
+        if (!tarefa.getCriadoPor().getLookupId().equals(usuarioLogado.getLookupId())) {
+            throw new AutorizacaoNegadaException("Você não tem permissão para acessar essa tarefa.");
+        }
 
-    public Optional<Tarefa> buscarTarefaPorLookupId(UUID lookupId) throws AccessDeniedException {
-        Usuario usuarioLogado = getUsuarioLogado();
-        Optional<Tarefa> tarefaOptional = tarefaRepository.findByLookupId(lookupId);
+        tarefa.setTituloTarefa(dto.titulo());
+        tarefa.setDescricao(dto.descricao());
 
-        if (tarefaOptional.isPresent()) {
-            Tarefa tarefa = tarefaOptional.get();
-
-            if (!tarefa.getCriadoPor().equals(usuarioLogado)) {
-                throw new AccessDeniedException("Você não tem permissão para acessar essa tarefa.");
+        if (dto.concluido() != null) {
+            if (dto.concluido() && !tarefa.feito()) {
+                tarefa.setConcluidoEm(LocalDateTime.now());
+            } else if (!dto.concluido() && tarefa.feito()) {
+                tarefa.setConcluidoEm(null);
             }
         }
-        return tarefaOptional;
+
+        tarefa.setAtualizadoEm(LocalDateTime.now());
+        tarefaRepository.save(tarefa);
+
+        return new TarefaResponseDTO(
+                tarefa.getLookupId(),
+                tarefa.getTituloTarefa(),
+                tarefa.getDescricao(),
+                tarefa.getCriadoEm(),
+                tarefa.getAtualizadoEm(),
+                tarefa.getConcluidoEm(),
+                tarefa.getCriadoPor().getEmail()
+        );
     }
 
-    public Tarefa atualizarTarefa(UUID lookupId, Tarefa tarefaAtualizada) {
-        Usuario usuarioLogado = getUsuarioLogado();
-        return tarefaRepository.findByLookupId(lookupId)
-                .map(existingTarefa -> {
-                    if (!existingTarefa.getCriadoPor().equals(usuarioLogado)) {
-                        try {
-                            throw new AccessDeniedException("Você não tem permissão para modificar essa tarefa.");
-                        } catch (AccessDeniedException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }
-                    existingTarefa.setDescricao(tarefaAtualizada.getDescricao());
-                    existingTarefa.setConcluidoEm(tarefaAtualizada.getConcluidoEm());
-                    return tarefaRepository.save(existingTarefa);
-                })
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarefa não encontrada."));
-    }
-
-    public void deletarTarefa(UUID lookupId) {
-        Usuario usuarioLogado = getUsuarioLogado();
+    public TarefaResponseDTO buscarTarefaPorLookupId(UUID lookupId, Usuario usuarioLogado) {
         Tarefa tarefa = tarefaRepository.findByLookupId(lookupId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarefa não encontrada."));
+                .orElseThrow(() -> new NaoEncontradoException("Tarefa não encontrada."));
 
-        if (!tarefa.getCriadoPor().equals(usuarioLogado)) {
-            throw new org.springframework.security.access.AccessDeniedException("Você não tem permissão para deletar essa tarefa.");
+        if (!tarefa.getCriadoPor().getLookupId().equals(usuarioLogado.getLookupId())) {
+            throw new AutorizacaoNegadaException("Você não tem permissão para acessar essa tarefa.");
         }
+
+        return new TarefaResponseDTO(
+                tarefa.getLookupId(),
+                tarefa.getTituloTarefa(),
+                tarefa.getDescricao(),
+                tarefa.getCriadoEm(),
+                tarefa.getAtualizadoEm(),
+                tarefa.getConcluidoEm(),
+                tarefa.getCriadoPor().getEmail()
+        );
+    }
+
+    @Transactional
+    public void deletarTarefa(UUID lookupId, Usuario usuarioLogado) {
+        Tarefa tarefa = tarefaRepository.findByLookupId(lookupId)
+                .orElseThrow(() -> new NaoEncontradoException("Tarefa não encontrada."));
+
+        if (!tarefa.getCriadoPor().getLookupId().equals(usuarioLogado.getLookupId())) {
+            throw new AutorizacaoNegadaException("Você não tem permissão para deletar essa tarefa.");
+        }
+
         tarefaRepository.delete(tarefa);
     }
+
 }

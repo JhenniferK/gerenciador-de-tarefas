@@ -49,6 +49,9 @@ public class Usuario implements UserDetails {
         }
     }
 
+    @OneToMany(mappedBy = "criadoPor", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Tarefa> tarefasCriadas;
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(() -> "ROLE_" + role.name());

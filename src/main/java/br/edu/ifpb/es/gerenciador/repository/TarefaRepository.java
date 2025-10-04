@@ -1,7 +1,6 @@
 package br.edu.ifpb.es.gerenciador.repository;
 
 import br.edu.ifpb.es.gerenciador.model.Tarefa;
-import br.edu.ifpb.es.gerenciador.model.Usuario;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -14,6 +13,6 @@ public interface TarefaRepository extends JpaRepository<Tarefa, UUID> {
 
     Optional<Tarefa> findByLookupId(UUID lookupId);
 
-    List<Tarefa> findByCriadoPor(Usuario criadoPor);
+    List<Tarefa> findByCriadoPor_lookupId(UUID usuarioId);
 
 }

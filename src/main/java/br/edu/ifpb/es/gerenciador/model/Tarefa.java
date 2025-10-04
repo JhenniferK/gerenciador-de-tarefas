@@ -17,26 +17,36 @@ import java.util.UUID;
 public class Tarefa {
 
     @Id
-    @Column(nullable = false)
-    private UUID lookupID;
+    @Column(unique = true, nullable = false)
+    private UUID lookupId;
 
     @Column(nullable = false)
+    private String tituloTarefa;
+
+    @Column
     private String descricao;
 
+    @Column(nullable = false)
     private LocalDateTime criadoEm;
 
+    @Column
     private LocalDateTime atualizadoEm;
 
+    @Column
     private LocalDateTime concluidoEm;
 
     @ManyToOne
-    @Column(nullable = false)
+    @JoinColumn(name = "id_usuario_criador", nullable = false)
     private Usuario criadoPor;
 
     @PrePersist
-    private void init() {
-        this.lookupID = UUID.randomUUID();
-        this.criadoEm = LocalDateTime.now();
+    protected void onCreate() {
+        if (this.lookupId == null) {
+            this.lookupId = UUID.randomUUID();
+        }
+        if (this.criadoEm == null) {
+            this.criadoEm = LocalDateTime.now();
+        }
     }
 
     public boolean feito() {
