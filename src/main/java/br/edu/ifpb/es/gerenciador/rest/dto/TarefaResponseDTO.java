@@ -6,7 +6,7 @@ import java.util.UUID;
 public record TarefaResponseDTO (
 
         UUID lookupId,
-        String nome,
+        String titulo,
         String descricao,
         LocalDateTime criadoEm,
         LocalDateTime atualizadoEm,

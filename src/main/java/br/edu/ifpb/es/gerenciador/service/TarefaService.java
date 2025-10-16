@@ -89,7 +89,7 @@ public class TarefaService {
     }
 
     @Transactional
-    public TarefaResponseDTO atualizarTarefa(UUID tarefaId, TarefaUpdateRequestDTO dto, Usuario usuarioLogado) {
+    public TarefaResponseDTO atualizarTarefa(UUID tarefaId, TarefaUpdateRequestDTO dto, Usuario usuarioLogado) throws AutorizacaoNegadaException {
         Tarefa tarefa = tarefaRepository.findById(tarefaId)
                 .orElseThrow(() -> new NaoEncontradoException("Tarefa não encontrada."));
 
@@ -103,7 +103,7 @@ public class TarefaService {
         if (dto.concluido() != null) {
             if (dto.concluido() && !tarefa.feito()) {
                 tarefa.setConcluidoEm(LocalDateTime.now());
-            } else if (!dto.concluido() && tarefa.feito()) {
+            } else if (!(dto.concluido() && tarefa.feito())) {
                 tarefa.setConcluidoEm(null);
             }
         }
@@ -122,7 +122,7 @@ public class TarefaService {
         );
     }
 
-    public TarefaResponseDTO buscarTarefaPorLookupId(UUID lookupId, Usuario usuarioLogado) {
+    public TarefaResponseDTO buscarTarefaPorLookupId(UUID lookupId, Usuario usuarioLogado) throws AutorizacaoNegadaException {
         Tarefa tarefa = tarefaRepository.findByLookupId(lookupId)
                 .orElseThrow(() -> new NaoEncontradoException("Tarefa não encontrada."));
 
@@ -142,12 +142,12 @@ public class TarefaService {
     }
 
     @Transactional
-    public void deletarTarefa(UUID lookupId, Usuario usuarioLogado) {
+    public void deletarTarefa(UUID lookupId, Usuario usuarioLogado) throws Throwable {
         Tarefa tarefa = tarefaRepository.findByLookupId(lookupId)
                 .orElseThrow(() -> new NaoEncontradoException("Tarefa não encontrada."));
 
         if (!tarefa.getCriadoPor().getLookupId().equals(usuarioLogado.getLookupId())) {
-            throw new AutorizacaoNegadaException("Você não tem permissão para deletar essa tarefa.");
+            throw new java.lang.Throwable("Você não tem permissão para deletar essa tarefa.");
         }
 
         tarefaRepository.delete(tarefa);

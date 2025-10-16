@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+@CrossOrigin(origins = "http://localhost:3000")
 @RestController
 @RequestMapping("/tarefas")
 public class TarefaRestController {
@@ -56,7 +57,7 @@ public class TarefaRestController {
     }
 
     @DeleteMapping("/{id}/deletar")
-    public ResponseEntity<TarefaResponseDTO> deletarTarefa(@PathVariable UUID id, @AuthenticationPrincipal Usuario usuarioLogado) {
+    public ResponseEntity<TarefaResponseDTO> deletarTarefa(@PathVariable UUID id, @AuthenticationPrincipal Usuario usuarioLogado) throws Throwable {
         tarefaService.deletarTarefa(id, usuarioLogado);
         return ResponseEntity.noContent().build();
     }
